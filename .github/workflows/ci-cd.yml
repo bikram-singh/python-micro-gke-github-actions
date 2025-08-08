@@ -69,5 +69,5 @@ jobs:
       - name: Deploy to GKE (update image)
         run: |
           IMAGE="${{ env.AR_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          kubectl set image deployment/${{ env.IMAGE_NAME }} app="$IMAGE"
+          kubectl set image deployment/${{ env.IMAGE_NAME }} flask-microservice="$IMAGE"
           kubectl rollout status deployment/${{ env.IMAGE_NAME }}
