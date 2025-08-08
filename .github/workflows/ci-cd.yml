@@ -66,8 +66,8 @@ jobs:
             kubectl set image deployment/${{ env.IMAGE_NAME }} ${{ env.IMAGE_NAME }}="$IMAGE"
           else
             echo "🚀 Deployment not found. Creating new deployment..."
-            sed -i "s|us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:latest|$IMAGE|g" k8s/deployment.yaml
-            kubectl apply -f k8s/deployment.yaml
+            sed -i "s|us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:latest|$IMAGE|g" gke/deployment.yaml
+            kubectl apply -f gke/deployment.yaml
           fi
 
           kubectl rollout status deployment/${{ env.IMAGE_NAME }}
