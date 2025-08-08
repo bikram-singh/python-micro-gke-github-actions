@@ -1,0 +1,87 @@
+name: CI/CD - build → artifactregistry → gke
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  IMAGE_NAME: flask-microservice
+  REGION: us-central1
+  REPO: my-python-repo
+  IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install test & security tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest flake8 bandit pip-audit
+
+      - name: Run tests
+        run: |
+          pytest -q
+
+      - name: Static analysis (flake8)
+        run: |
+          flake8 --max-line-length=120 || true
+
+      - name: Security static scan (bandit)
+        run: |
+          bandit -r .
+
+      - name: Dependency audit (pip-audit)
+        run: |
+          pip-audit --progress disabled || true
+
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v1
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - name: Configure gcloud CLI
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT }}
+
+      - name: Configure docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}
+
+      - name: Image vulnerability scan (Trivy)
+        uses: aquasecurity/trivy-action@v0.9.2
+        with:
+          image-ref: ${{ env.IMAGE }}
+          format: 'table'
+          exit-code: '1'
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v1
+        with:
+          cluster_name: ${{ secrets.GKE_CLUSTER }}
+          location: ${{ secrets.GKE_LOCATION }}
+          project_id: ${{ secrets.GCP_PROJECT }}
+
+      - name: Deploy to GKE (update image)
+        run: |
+          kubectl set image deployment/flask-microservice flask=${{ env.IMAGE }} --record
+          kubectl rollout status deployment/flask-microservice --timeout=120s
