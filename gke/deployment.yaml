@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: flask
-          image: REPLACE_WITH_IMAGE
+          image: us-central1-docker.pkg.dev/github-actions-111/my-python-micro-repo/flask-microservice:latest    #Replace with image name
           ports:
             - containerPort: 8080
           readinessProbe:
