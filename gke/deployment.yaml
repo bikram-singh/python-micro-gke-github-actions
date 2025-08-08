@@ -2,8 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: flask-microservice
-  labels:
-    app: flask-microservice
 spec:
   replicas: 2
   selector:
@@ -15,13 +13,7 @@ spec:
         app: flask-microservice
     spec:
       containers:
-        - name: flask
-          image: us-central1-docker.pkg.dev/github-actions-111/my-python-micro-repo/flask-microservice:latest    #Replace with image name
-          ports:
-            - containerPort: 8080
-          readinessProbe:
-            httpGet:
-              path: /
-              port: 8080
-            initialDelaySeconds: 5
-            periodSeconds: 10
+      - name: flask-microservice   # Must match workflow's CONTAINER_NAME
+        image: us-central1-docker.pkg.dev/github-actions-111/my-python-micro-repo/flask-microservice:latest
+        ports:
+        - containerPort: 8080
