@@ -1,4 +1,4 @@
-name: CI/CD - build → artifactregistry → gke
+name: CI/CD - build flask app → artifactregistry → gke
 on:
   push:
     branches: [ "main" ]
