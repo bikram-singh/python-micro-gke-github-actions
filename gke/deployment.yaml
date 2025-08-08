@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: flask-microservice
+  labels:
+    app: flask-microservice
 spec:
   replicas: 2
   selector:
@@ -13,7 +15,17 @@ spec:
         app: flask-microservice
     spec:
       containers:
-      - name: flask-microservice   # Must match workflow's CONTAINER_NAME
-        image: us-central1-docker.pkg.dev/github-actions-111/my-python-micro-repo/flask-microservice:latest
-        ports:
-        - containerPort: 8080
+        - name: flask-microservice
+          image: us-central1-docker.pkg.dev/github-actions-111/my-python-micro-repo/flask-microservice:latest
+          # This will be overridden by the workflow with SHA-tagged image
+          ports:
+            - containerPort: 5000
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+      imagePullSecrets:
+        - name: artifact-registry
