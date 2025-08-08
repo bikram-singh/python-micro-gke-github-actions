@@ -10,6 +10,7 @@ env:
   GKE_ZONE: us-central1-a
   AR_REGION: us-central1
   REPO: my-python-micro-repo
+  PROJECT_ID: github-actions-111
 
 jobs:
   build-and-deploy:
@@ -27,8 +28,8 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           token_format: access_token
-          workload_identity_provider: projects/1070327104780/locations/global/workloadIdentityPools/github-pool/providers/github-provider
-          service_account: gh-actions-gke-sa@github-actions-111.iam.gserviceaccount.com
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
 
       - name: Install GKE gcloud auth plugin
         run: |
@@ -46,18 +47,27 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          IMAGE="${{ env.AR_REGION }}-docker.pkg.dev/github-actions-111/${{ env.REPO }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          IMAGE="${{ env.AR_REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
 
       - name: Get GKE credentials
         run: |
-          gcloud container clusters get-credentials my-gke-cluster \
+          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER }} \
             --zone ${{ env.GKE_ZONE }} \
-            --project github-actions-111
+            --project ${{ env.PROJECT_ID }}
 
       - name: Deploy to GKE
         run: |
-          IMAGE="${{ env.AR_REGION }}-docker.pkg.dev/github-actions-111/${{ env.REPO }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          kubectl set image deployment/${{ env.IMAGE_NAME }} ${{ env.IMAGE_NAME }}="$IMAGE"
+          IMAGE="${{ env.AR_REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          
+          if kubectl get deployment ${{ env.IMAGE_NAME }} >/dev/null 2>&1; then
+            echo "✅ Deployment exists. Updating image..."
+            kubectl set image deployment/${{ env.IMAGE_NAME }} ${{ env.IMAGE_NAME }}="$IMAGE"
+          else
+            echo "🚀 Deployment not found. Creating new deployment..."
+            sed -i "s|us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:latest|$IMAGE|g" k8s/deployment.yaml
+            kubectl apply -f k8s/deployment.yaml
+          fi
+
           kubectl rollout status deployment/${{ env.IMAGE_NAME }}
