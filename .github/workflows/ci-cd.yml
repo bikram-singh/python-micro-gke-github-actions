@@ -1,4 +1,4 @@
-name: CI/CD - Build Flask App → Artifactregistry → Deploy on GKE
+name: CI/CD - Build Flask App → Artifact Registry → Deploy on GKE
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 env:
   IMAGE_NAME: flask-microservice                          # Your container/app name
   REGION: ${{ secrets.GKE_LOCATION }}                     # GKE & Artifact Registry region
-  REPO: ${{ secrets.ARTIFACT_REGISTRY_REPO }}              # Artifact Registry repository name
+  REPO: my-python-micro-repo                              # Artifact Registry repository name (fixed so it won't double expand)
 
 jobs:
   build-and-deploy:
@@ -28,7 +28,7 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           token_format: access_token
-          workload_identity_provider: projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/${{ secrets.GCP_WORKLOAD_ID_POOL }}/providers/${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}
           service_account: ${{ secrets.GCP_SA_EMAIL }}
 
       # Step 3: Configure Docker for Artifact Registry
@@ -46,7 +46,7 @@ jobs:
       - name: Get GKE credentials
         run: |
           gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER }} \
-            --region ${{ env.REGION }} \
+            --zone ${{ env.REGION }} \
             --project ${{ secrets.GCP_PROJECT }}
 
       # Step 6: Deploy updated image to GKE
