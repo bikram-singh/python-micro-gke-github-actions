@@ -1,68 +1,94 @@
+# Workflow name for clarity in GitHub Actions UI
 name: CI/CD - Build Flask App → Artifact Registry → Deploy on GKE
 
+# Trigger the workflow on push events to the main branch
 on:
   push:
     branches:
       - main
 
+# Define environment variables used across the workflow for consistency
 env:
-  IMAGE_NAME: flask-microservice
-  GKE_ZONE: us-central1-a
-  AR_REGION: us-central1
-  REPO: my-python-micro-repo
-  GKE_CLUSTER: my-gke-cluster
-  GCP_PROJECT: github-actions-111
+  IMAGE_NAME: flask-microservice                   # Base name for the Docker image
+  GKE_ZONE: us-central1-a                          # GKE cluster zone
+  AR_REGION: us-central1                           # Artifact Registry region
+  REPO: my-python-micro-repo                       # Artifact Registry repository name
+  GKE_CLUSTER: my-gke-cluster                      # Name of the GKE cluster
+  GCP_PROJECT: github-actions-111                  # Google Cloud project ID
 
+# Define the job for building and deploying the application
 jobs:
   build-and-deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest                          # Use the latest Ubuntu runner for the job
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: 'read'                             # Grant read access to repository contents
+      id-token: 'write'                            # Allow writing ID tokens for Google Cloud authentication
 
     steps:
+      # Step 1: Check out the repository code
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4                    # Use GitHub's checkout action to clone the repository
 
+      # Step 2: Authenticate with Google Cloud using workload identity federation
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v2         # Use Google Cloud auth action
         with:
-          token_format: access_token
-          workload_identity_provider: projects/1070327104780/locations/global/workloadIdentityPools/github-pool/providers/github-provider
-          service_account: gh-actions-gke-sa@github-actions-111.iam.gserviceaccount.com
+          token_format: access_token                # Request an access token for authentication
+          workload_identity_provider: projects/1070327104780/locations/global/workloadIdentityPools/github-pool/providers/github-provider  # Workload identity provider for secure authentication
+          service_account: gh-actions-gke-sa@github-actions-111.iam.gserviceaccount.com  # Service account used for Google Cloud operations
 
+      # Step 3: Install the GKE gcloud auth plugin for Kubernetes operations
       - name: Install GKE gcloud auth plugin
         run: |
+          # Update package lists
           sudo apt-get update
+          # Install dependencies for secure package installation
           sudo apt-get install -y apt-transport-https ca-certificates gnupg curl
+          # Add Google Cloud SDK repository to the sources list
           echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | \
             sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+          # Download and install the Google Cloud public key
           curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | \
             sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+          # Update package lists again with the new repository
           sudo apt-get update
+          # Install the GKE gcloud auth plugin
           sudo apt-get install -y google-cloud-cli-gke-gcloud-auth-plugin
 
+      # Step 4: Configure Docker to authenticate with Google Cloud Artifact Registry
       - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet  # Authenticate Docker to push images to the specified Artifact Registry
 
+      # Step 5: Build and push the Docker image to Artifact Registry
       - name: Build and push Docker image
         run: |
+          # Construct the full image path with the commit SHA as the tag for versioning
           IMAGE="us-central1-docker.pkg.dev/github-actions-111/my-python-micro-repo/flask-microservice:${GITHUB_SHA}"
+          # Build the Docker image from the Dockerfile in the repository
           docker build -t "$IMAGE" .
+          # Push the built image to the Artifact Registry
           docker push "$IMAGE"
 
+      # Step 6: Obtain credentials for the GKE cluster
       - name: Get GKE credentials
         run: |
+          # Authenticate with the GKE cluster to allow kubectl commands
           gcloud container clusters get-credentials my-gke-cluster \
             --zone us-central1-a \
             --project github-actions-111
 
+      # Step 7: Apply the Kubernetes deployment manifest
       - name: Apply Deployment manifest (always)
         run: |
+          # Apply the deployment configuration from the specified YAML file
           kubectl apply -f gke/deployment.yaml
 
+      # Step 8: Update the deployment with the new Docker image and monitor rollout
       - name: Deploy to GKE (update image)
         run: |
+          # Define the image path again for clarity
           IMAGE="us-central1-docker.pkg.dev/github-actions-111/my-python-micro-repo/flask-microservice:${GITHUB_SHA}"
+          # Update the deployment to use the new image
           kubectl set image deployment/flask-microservice flask-microservice="$IMAGE"
+          # Wait for the deployment rollout to complete and verify its status
           kubectl rollout status deployment/flask-microservice
