@@ -56,7 +56,16 @@ jobs:
             --zone ${{ env.GKE_ZONE }} \
             --project github-actions-111
 
-      - name: Deploy to GKE
+      - name: Apply Deployment manifest if not exists
+        run: |
+          if ! kubectl get deployment ${{ env.IMAGE_NAME }} >/dev/null 2>&1; then
+            echo "Deployment not found. Creating..."
+            kubectl apply -f k8s/deployment.yaml
+          else
+            echo "Deployment exists. Skipping creation."
+          fi
+
+      - name: Deploy to GKE (update image)
         run: |
           IMAGE="${{ env.AR_REGION }}-docker.pkg.dev/github-actions-111/${{ env.REPO }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
           kubectl set image deployment/${{ env.IMAGE_NAME }} ${{ env.IMAGE_NAME }}="$IMAGE"
