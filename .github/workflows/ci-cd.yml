@@ -1,4 +1,4 @@
-name: CI/CD - build flask app → artifactregistry → gke
+name: CI/CD - Build Flask App → Artifactregistry → Deploy on GKE
 
 on:
   push:
@@ -6,74 +6,52 @@ on:
       - main   # Trigger workflow only when pushing to the main branch
 
 env:
-  IMAGE_NAME: flask-microservice           # The name of your application / container
-  REGION: us-central1                      # Artifact Registry & GKE region
-  REPO: my-python-micro-repo               # Artifact Registry repository name
+  IMAGE_NAME: flask-microservice                          # Your container/app name
+  REGION: ${{ secrets.GKE_LOCATION }}                     # GKE & Artifact Registry region
+  REPO: ${{ secrets.ARTIFACT_REGISTRY_REPO }}              # Artifact Registry repository name
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: 'read'                     # Read repo contents
-      id-token: 'write'                    # Required for Workload Identity Federation (OIDC auth)
+      contents: 'read'
+      id-token: 'write'
 
     steps:
-      # --------------------------
       # Step 1: Checkout repository
-      # --------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # --------------------------
       # Step 2: Authenticate to Google Cloud via Workload Identity Federation
-      # --------------------------
       - name: Authenticate to Google Cloud
         id: auth
         uses: google-github-actions/auth@v2
         with:
           token_format: access_token
-          workload_identity_provider: projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/${{ secrets.WIF_POOL }}/providers/${{ secrets.WIF_PROVIDER }}
+          workload_identity_provider: projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/${{ secrets.GCP_WORKLOAD_ID_POOL }}/providers/${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}
           service_account: ${{ secrets.GCP_SA_EMAIL }}
 
-      # --------------------------
-      # Step 3: Configure Docker to authenticate with Artifact Registry
-      # --------------------------
+      # Step 3: Configure Docker for Artifact Registry
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
-      # --------------------------
       # Step 4: Build and push Docker image to Artifact Registry
-      # --------------------------
       - name: Build and push Docker image
         run: |
-          # Define the full image path with commit SHA for versioning
           IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          
-          # Build the Docker image
           docker build -t "$IMAGE" .
-          
-          # Push the image to Artifact Registry
           docker push "$IMAGE"
 
-      # --------------------------
       # Step 5: Get credentials for GKE cluster
-      # --------------------------
       - name: Get GKE credentials
         run: |
           gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER }} \
             --region ${{ env.REGION }} \
             --project ${{ secrets.GCP_PROJECT }}
 
-      # --------------------------
       # Step 6: Deploy updated image to GKE
-      # --------------------------
       - name: Deploy to GKE
         run: |
-          # Same image path as before
           IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          
-          # Update the deployment with the new image
           kubectl set image deployment/${{ env.IMAGE_NAME }} ${{ env.IMAGE_NAME }}="$IMAGE"
-          
-          # Wait until the deployment rollout is complete
           kubectl rollout status deployment/${{ env.IMAGE_NAME }}
