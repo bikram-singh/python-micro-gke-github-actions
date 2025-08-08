@@ -38,6 +38,11 @@ jobs:
           IMAGE="${{ env.AR_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
+           
+      - name: Install GKE gcloud auth plugin
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
 
       - name: Get GKE credentials
         run: |
